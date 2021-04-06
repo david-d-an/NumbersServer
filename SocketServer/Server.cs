@@ -8,6 +8,9 @@ using System.Threading;
 
 namespace SocketServer {
     class Server {
+        private string ip = "127.0.0.1";
+        private int port = 4000;
+
         private static readonly string _locker = "THREAD_LOCKER";
         private static readonly int _maxThreadCount = 5;
         private static int _threadCount;
@@ -18,7 +21,7 @@ namespace SocketServer {
         }
 
         TcpListener server = null;
-        public Server(string ip, int port) {
+        public Server() {
             _threadCount = 0;
             IPAddress localAddr = IPAddress.Parse(ip);
             server = new TcpListener(localAddr, port);
@@ -30,9 +33,9 @@ namespace SocketServer {
 
         public void StartListener() {
             try {
-                while (true) {
+                Console.WriteLine("Waiting for a connection...");
 
-                    Console.WriteLine("Waiting for a connection...");
+                while (true) {
                     while(!server.Pending()) {
                         if (_terminated) {
                             Console.WriteLine("Server shutdown by termination request.");
