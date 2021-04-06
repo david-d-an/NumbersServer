@@ -113,7 +113,9 @@ namespace SocketServer {
 
         public void HandleDeivce(Object obj) {
             TcpClient client = (TcpClient)obj;
-            int threadId = Thread.CurrentThread.ManagedThreadId;
+            string threadId = 
+                Thread.CurrentThread.ManagedThreadId
+                .ToString().PadLeft(2, '0');
             var stream = client.GetStream();
             stream.ReadTimeout = 5000;
             string data = null;
@@ -124,8 +126,9 @@ namespace SocketServer {
                 try {
                     i = stream.Read(bytes, 0, bytes.Length);
                     if (i == 0) {
-                        // Termination requested by client
+                        // Client disconnected
                         // No need to keep the thread
+                        DecrementThreadCount(_locker);
                         client.Close();
                         return;
                     }
@@ -133,17 +136,24 @@ namespace SocketServer {
                     // ReadTimeout causes IOException
                     continue;
                 } catch(Exception e) {
-                    Console.WriteLine("Exception while reading stream: {0}", e.Message);
+                    Console.WriteLine(
+                        "(Thread {0}) Exception while reading stream: {1}", 
+                        threadId, e.Message);
                     continue;
                 }
 
                 try {
                     data = Encoding.ASCII.GetString(bytes, 0, i);
-                    Console.WriteLine("{1}: Received: {0}", data, threadId);
+                    Console.WriteLine(
+                        "(Thread {0}) Received: {1}", 
+                        threadId, data);
 
                     if (data == "terminate") {
-                        string terminationMsg = "Termination requested. Server is being shutdown.";
-                        Console.WriteLine("{1}: Sent: {0}", terminationMsg, threadId);
+                        string terminationMsg = 
+                            "Termination requested. Server is being shutdown.";
+                        Console.WriteLine(
+                            "(Thread {0}) Sent: {1}", 
+                            threadId, terminationMsg);
                         stream.SendMessage(terminationMsg);
 
                         ToggleTerminated(_locker, true);
@@ -153,8 +163,11 @@ namespace SocketServer {
                     }
                     else if (data.Length != 9 || !long.TryParse(data, out long x))
                     {
-                        string msg = "Invalud value entered. Connection is being terminated.";
-                        Console.WriteLine("{1}: Sent: {0}", msg, threadId);
+                        string msg = 
+                            "Invalid value entered. Connection is being terminated.";
+                        Console.WriteLine(
+                            "(Thread {0}) Sent: {1}", 
+                            threadId, msg);
                         stream.SendMessage(msg);
                         DecrementThreadCount(_locker);
                         client.Close();
@@ -162,9 +175,9 @@ namespace SocketServer {
                     }
 
                     string str = "Transmission Acknowledged";
-                    logFile.WriteInLog(_locker, data + " : " + threadId);
+                    logFile.WriteInLog(_locker, threadId, data);
                     stream.SendMessage(str);
-                    Console.WriteLine("{1}: Sent: {0}", str, threadId);
+                    Console.WriteLine("(Thread {0}) Sent: {1}", threadId, str);
                 } catch(Exception ex) {
                     Console.WriteLine("Exception: {0}", ex.Message);
                     logFile.Close();
@@ -177,7 +190,7 @@ namespace SocketServer {
 
             // This part reached when request arrived while termination in progress
             string denialMsg = "Request deined. Server is being terminated.";
-            Console.WriteLine("{1}: Sent: {0}", denialMsg, threadId);
+            Console.WriteLine("(Thread {0}) Sent: {1}", threadId, denialMsg);
             stream.SendMessage(denialMsg);
             DecrementThreadCount(_locker);
             client.Close();
@@ -190,12 +203,21 @@ namespace SocketServer {
             stream.Write(replyBytes, 0, replyBytes.Length);
         }
 
-        public static void WriteInLog(this StreamWriter file, object locker, string msg) {
+        public static void WriteInLog(
+            this StreamWriter file, 
+            object locker, 
+            string threadId,
+            string msg) {
             Monitor.Enter(locker);
-            file.WriteLine(msg);
+            file.WriteLine("(Thread {0}) : {1}", threadId, msg);
             Monitor.PulseAll(locker);
             Monitor.Exit(locker);
         }
+
+        public static void ConsoleWriteline(string threadId, string msg) {
+            Console.WriteLine("(Thread {0}) {1}", threadId, msg);
+        }
+
 
         public static void ExitMonitor(this object locker)
         {

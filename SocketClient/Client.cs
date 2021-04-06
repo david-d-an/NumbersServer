@@ -6,12 +6,25 @@ using System.Threading;
 namespace SocketClient
 {
     class Client{
-       private int port = 4000;
+        private string ip = "127.0.0.1";
+        private int port = 4000;
+        private string threadId;
 
         public Client() {
-            Console.Write("File Nam: ");            
-            string fileName = Console.ReadLine();   // ./a1.txt   ./b1.txt
-            Connect("127.0.0.1", fileName);
+            // Thread ID = last 4 digits of GUID
+            threadId = Guid.NewGuid().ToString();
+            threadId = threadId.Substring(threadId.Length - 4);
+
+            Console.Write("(Client {0}) File Name: ", threadId);
+            string fileName = Console.ReadLine();
+            Connect(ip, fileName);
+        }
+
+        public Client(int id, string fileName) {
+            threadId = id.ToString();
+
+            Console.WriteLine("(Client {0}) File Name: {1}", threadId, fileName);
+            Connect(ip, fileName);
         }
 
         void Connect(String server, string fileName) {
@@ -31,26 +44,30 @@ namespace SocketClient
                     Byte[] data = System.Text.Encoding.ASCII.GetBytes(message);   
                     // Send the message to the connected TcpServer. 
                     stream.Write(data, 0, data.Length);
-                    Console.WriteLine("Sent: {0}", message);         
+                    // Console.WriteLine("(Client {0}) Sent: {1}", threadId, message);         
+
                     // Bytes Array to receive Server Response.
                     data = new Byte[256];
                     String response = String.Empty;
+
                     // Read the Tcp Server Response Bytes.
                     Int32 bytes = stream.Read(data, 0, data.Length);
                     response = System.Text.Encoding.ASCII.GetString(data, 0, bytes);
-                    Console.WriteLine("Received: {0}", response);      
-                    Thread.Sleep(2000);   
+
+                    // Console.WriteLine("(Client {0}) Received: {1}", threadId, response);
+                    // Intentional delay for testing
+                    Thread.Sleep(2000);
                 }
                 client.Close();
                 stream.Close();
             }
             catch (IOException) {
-                Console.WriteLine("Connection closed by the server.");
+                Console.WriteLine("(Client {0}) Connection closed by the server.", threadId);
             }
             catch (Exception e) {
-                Console.WriteLine("Exception: {0}", e);
+                Console.WriteLine("(Client {0}) Exception: {1}", threadId, e);
             }
-            finally {                
+            finally {
             }
         }
 
