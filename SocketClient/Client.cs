@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Net.Sockets;
+using System.Text;
 using System.Threading;
 
 namespace SocketClient
@@ -9,6 +10,9 @@ namespace SocketClient
         private string ip = "127.0.0.1";
         private int port = 4000;
         private string threadId;
+        private readonly int MaxItemCountInChunk = 3266;
+        // private readonly int ItemSize = 10;
+
 
         public Client() {
             // Thread ID = last 4 digits of GUID
@@ -35,28 +39,32 @@ namespace SocketClient
                 NetworkStream stream = client.GetStream();
                 stream.ReadTimeout = 5000;
 
-                while ((message = file.ReadLine()) != null) {
+                long dataCount = 0;
+                StringBuilder chunk = new StringBuilder();
+                while (true)
+                {
+                    message = file.ReadLine();
+                    // EOF
+                    if (message == null) {
+                        // Console.WriteLine("Last Trnsmit called: {0}", dataCount);
+                        // Console.WriteLine("{0}", chunk);
+                        Transmit(chunk.ToString(), stream);
+                        break;
+                    }
+
                     // var message = Console.ReadLine();
                     if (message.Length == 0)
                         continue;
 
-                    // Translate the Message into ASCII.
-                    Byte[] data = System.Text.Encoding.ASCII.GetBytes(message);   
-                    // Send the message to the connected TcpServer. 
-                    stream.Write(data, 0, data.Length);
-                    // Console.WriteLine("(Client {0}) Sent: {1}", threadId, message);         
+                    chunk.Append(message).Append("\n");
+                    dataCount++;
 
-                    // Bytes Array to receive Server Response.
-                    data = new Byte[256];
-                    String response = String.Empty;
-
-                    // Read the Tcp Server Response Bytes.
-                    Int32 bytes = stream.Read(data, 0, data.Length);
-                    response = System.Text.Encoding.ASCII.GetString(data, 0, bytes);
-
-                    // Console.WriteLine("(Client {0}) Received: {1}", threadId, response);
-                    // Intentional delay for testing
-                    // Thread.Sleep(2000);
+                    if (dataCount % MaxItemCountInChunk == 0) {
+                        // Console.WriteLine("Trnsmit called: {0}", dataCount);
+                        // Console.WriteLine("{0}", chunk);
+                        Transmit(chunk.ToString(), stream);
+                        chunk = new StringBuilder();
+                    }
                 }
                 client.Close();
                 stream.Close();
@@ -71,5 +79,23 @@ namespace SocketClient
             }
         }
 
+        private void Transmit(string message, NetworkStream stream)
+        {
+            // Translate the Message into ASCII.
+            Byte[] data = System.Text.Encoding.ASCII.GetBytes(message);
+            // Send the message to the connected TcpServer. 
+            stream.Write(data, 0, data.Length);
+            // Console.WriteLine("(Client {0}) Sent: {1}", threadId, message);         
+
+            // Bytes Array to receive Server Response.
+            // Read the Tcp Server Response Bytes.
+            Byte[] responseData = new Byte[256];
+            Int32 byteCount = stream.Read(responseData, 0, responseData.Length);
+            string response = System.Text.Encoding.ASCII.GetString(responseData, 0, byteCount);
+
+            Console.WriteLine("(Client {0}) Received: {1}", threadId, response);
+            // Intentional delay for testing
+            // Thread.Sleep(2000);
+        }
     }
 }

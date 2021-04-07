@@ -10,13 +10,15 @@ using System.Threading;
 namespace SocketServer
 {
   class Server {
-    private TcpListener server = null;
     private readonly string logFileName = "./Logs/result.log";
     private readonly string ip = "127.0.0.1";
     private readonly int port = 4000;
+    private readonly int MaxItemCountInChunk = 3266;
+    private readonly int ItemSize = 10;
 
     private readonly string _locker = "THREAD_LOCKER";
     private readonly int _maxThreadCount = 5;
+    private TcpListener server = null;
     private int _threadCount;
     private static bool _terminated = false;
 
@@ -77,9 +79,9 @@ namespace SocketServer
         CustomExtension.ActionWorker(locker, () => _duplicateCountSession += i);
     #endregion
 
-    private KeyValuePair<string, int>[] GetCounts(object locker) {
+    private KeyValuePair<string, int>[] FlushCounters(object locker) {
       Monitor.Enter(locker);
-      var counts = new KeyValuePair<string, int>[] {
+      var counters = new KeyValuePair<string, int>[] {
           new KeyValuePair<string, int>(
               "Duplicate",
               _duplicateCountSession
@@ -91,23 +93,23 @@ namespace SocketServer
           new KeyValuePair<string, int>(
               "TotalUnique",
               _uniqueCount + _uniqueCountSession
+          ),
+          new KeyValuePair<string, int>(
+              "TotalSubmission",
+              _inputCount
           )
       };
+      _duplicateCount += _duplicateCountSession;
+      _uniqueCount += _uniqueCountSession;
+      _inputCount += _inputCountSession;
+      _duplicateCountSession = 0;
+      _uniqueCountSession = 0;
+      _inputCountSession = 0;
+
       Monitor.PulseAll(locker);
       Monitor.Exit(locker);
-
-      return counts;
+      return counters;
     }
-
-    private void FlushCounters(object locker) =>
-      CustomExtension.ActionWorker(locker, () => {
-        _duplicateCount += _duplicateCountSession;
-        _uniqueCount += _uniqueCountSession;
-        _inputCount += _inputCountSession;
-        _duplicateCountSession = 0;
-        _uniqueCountSession = 0;
-        _inputCountSession = 0;
-      });
 
     public Server() {
       _threadCount = 0;
@@ -179,7 +181,7 @@ namespace SocketServer
       var stream = client.GetStream();
       stream.ReadTimeout = 5000;
       string data = null;
-      Byte[] bytes = new Byte[256];
+      Byte[] bytes = new Byte[MaxItemCountInChunk*ItemSize];
       int i;            
 
       while (!_terminated) {
@@ -204,52 +206,61 @@ namespace SocketServer
           continue;
         }
 
+        var dataArray = Encoding.ASCII.GetString(bytes, 0, i).Split("\n");
         try {
-          data = Encoding.ASCII.GetString(bytes, 0, i);
-          // Console.WriteLine(
-          //     "(Thread {0}) Received: {1}", 
-          //     threadId, data);
+          foreach(var d in dataArray) {
+            // data = Encoding.ASCII.GetString(bytes, 0, i);
+            // Console.WriteLine(
+            //     "(Thread {0}) Received: {1}", 
+            //     threadId, data);
+            data = d;
+            if (data.Length == 0)
+              continue;
+            else if (data == "terminate") {
+              string terminationMsg =
+                "Termination requested. Server is being shutdown.";
+              Console.WriteLine(
+                "(Thread {0}) Sent: {1}",
+                threadId, terminationMsg);
+              stream.SendMessage(terminationMsg);
 
-          if (data == "terminate") {
-            string terminationMsg =
-              "Termination requested. Server is being shutdown.";
-            Console.WriteLine(
-              "(Thread {0}) Sent: {1}",
-              threadId, terminationMsg);
-            stream.SendMessage(terminationMsg);
+              ToggleTerminated(_locker, true);
+              DecrementThreadCount(_locker);
+              client.Close();
+              // Console.WriteLine(ConnectClosedMsg());
+              return;
+            }
+            else if (data.Length != 9 || !long.TryParse(data, out long x)) {
+              string msg = 
+                "Invalid value entered. Connection is being terminated.";
+              Console.WriteLine(
+                "(Thread {0}) Sent: {1}", 
+                threadId, msg);
+              Console.WriteLine(
+                "DataLength: {0}, Data: {1}", data.Length, data);
+              stream.SendMessage(msg);
+              DecrementThreadCount(_locker);
+              client.Close();
+              // Console.WriteLine(ConnectClosedMsg());
+              return;
+            }
 
-            ToggleTerminated(_locker, true);
-            DecrementThreadCount(_locker);
-            client.Close();
-            // Console.WriteLine(ConnectClosedMsg());
-            return;
+            IncrementInputCountSession(_locker);
+            if (hashSet.AddToSet(_locker, data)) {
+              IncrementUniquCountSession(_locker);
+              logFile.WriteInLog(_locker, threadId, data);
+              // string str = "Accepted: duplicate was NOT found";
+              // stream.SendMessage(str);
+              // Console.WriteLine("(Thread {0}) Sent: {1}", threadId, str);
+            } else {
+              IncrementDuplicateCountSession(_locker);
+              // string str = "Rejected: duplicate was found (" + data + ")";
+              // stream.SendMessage(str);
+              // Console.WriteLine("(Thread {0}) Sent: {1}", threadId, str);
+            }
           }
-          else if (data.Length != 9 || !long.TryParse(data, out long x)) {
-            string msg = 
-              "Invalid value entered. Connection is being terminated.";
-            Console.WriteLine(
-              "(Thread {0}) Sent: {1}", 
-              threadId, msg);
-            stream.SendMessage(msg);
-            DecrementThreadCount(_locker);
-            client.Close();
-            // Console.WriteLine(ConnectClosedMsg());
-            return;
-          }
+          stream.SendMessage("Received " + bytes.Length + " bytes");
 
-          IncrementInputCountSession(_locker);
-          if (hashSet.AddToSet(_locker, data)) {
-            IncrementUniquCountSession(_locker);
-            logFile.WriteInLog(_locker, threadId, data);
-            string str = "Accepted: duplicate was NOT found";
-            stream.SendMessage(str);
-            // Console.WriteLine("(Thread {0}) Sent: {1}", threadId, str);
-          } else {
-            IncrementDuplicateCountSession(_locker);
-            string str = "Rejected: duplicate was found (" + data + ")";
-            stream.SendMessage(str);
-            // Console.WriteLine("(Thread {0}) Sent: {1}", threadId, str);
-          }
         } catch(Exception ex) {
           Console.WriteLine("Exception: {0}", ex.Message);
           logFile.Close();
@@ -282,10 +293,11 @@ namespace SocketServer
       while(!_terminated) {
         Thread.Sleep(10000);
 
-        var counts = GetCounts(_locker);
+        var counts = FlushCounters(_locker);
         int uc = counts.Where(k => k.Key == "Unique").FirstOrDefault().Value;
         int dc = counts.Where(k => k.Key == "Duplicate").FirstOrDefault().Value;
         int tu = counts.Where(k => k.Key == "TotalUnique").FirstOrDefault().Value;
+        int ts = counts.Where(k => k.Key == "TotalSubmission").FirstOrDefault().Value;
 
         String msg = Environment.NewLine +
                     "Received at " + DateTime.Now.ToString("HH:mm:ss") +
@@ -293,9 +305,9 @@ namespace SocketServer
                     uc + " unique numbers, " +
                     dc + " duplicates. " +
                     "Unique total: " + tu +
+                    " Total Submission: " + ts +
                     Environment.NewLine;
         Console.WriteLine(msg);
-        FlushCounters(_locker);
       }
     }
   }

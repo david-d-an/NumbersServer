@@ -20,13 +20,20 @@ namespace SocketClient
             // }).Start();
             // new Thread(() => new Client()).Start();
 
-            new Thread(() => new Client(1, "./Data/a1.txt")).Start();
-            new Thread(() => new Client(2, "./Data/a2.txt")).Start();
-            new Thread(() => new Client(3, "./Data/a3.txt")).Start();
-            new Thread(() => new Client(4, "./Data/a4.txt")).Start();
-            new Thread(() => new Client(5, "./Data/a5.txt")).Start();
-            new Thread(() => new Client(6, "./Data/a6.txt")).Start();
-            new Thread(() => new Client(7, "./Data/a7.txt")).Start();
+            // new Thread(() => new Client(1, "./Data/a1.txt")).Start();
+            // new Thread(() => new Client(2, "./Data/a2.txt")).Start();
+            // new Thread(() => new Client(3, "./Data/a3.txt")).Start();
+            // new Thread(() => new Client(4, "./Data/a4.txt")).Start();
+            // new Thread(() => new Client(5, "./Data/a5.txt")).Start();
+            // new Thread(() => new Client(6, "./Data/a6.txt")).Start();
+            // new Thread(() => new Client(7, "./Data/a7.txt")).Start();
+
+            // new Thread(() => new Client(1, "./Data/a2M.txt")).Start();
+
+            for(int i = 0; i < 5; i++) {
+                new Thread(() => new Client(i, "./Data/a400K.txt")).Start();
+            }
+
        }
     }
 }
