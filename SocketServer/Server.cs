@@ -77,6 +77,8 @@ namespace SocketServer
             // server.Server.ReceiveTimeout = 1000;
             // server.Server.SendTimeout = 1000;
             try {
+                new Thread(() => Notifiy()).Start();
+
                 server.Start();
                 StartListener();
             } catch (SocketException e) {
@@ -219,6 +221,14 @@ namespace SocketServer
             stream.SendMessage(denialMsg);
             DecrementThreadCount(_locker);
             client.Close();
+        }
+
+
+        public void Notifiy() {
+            while(!_terminated) {
+                Thread.Sleep(10000);
+                Console.WriteLine("Hey : {0}", DateTime.Now.ToString("HH:mm:ss"));
+            }
         }
     }
 
