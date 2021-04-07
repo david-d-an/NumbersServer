@@ -1,12 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 
-namespace SocketServer {
+namespace SocketServer
+{
     class Server {
         private string logFileName = "./Logs/result.log";
         private string ip = "127.0.0.1";
@@ -18,39 +20,51 @@ namespace SocketServer {
         private static bool _terminated = false;
 
         private StreamWriter logFile;
-        private int inputCount = 0;
-        private int uniqueCount = 0;
-        private int duplicateCount = 0;
-        private HashSet<long> data = new HashSet<long>();
+        private int _inputCount = 0;
+        private int _uniqueCount = 0;
+        private int _duplicateCount = 0;
+
+        // Use Hash set for average O(1) performance.
+        private HashSet<string> hashSet = new HashSet<string>();
 
         private void IncrementThreadCount(object locker, int i = 1) {
-            Monitor.Enter(locker);
-            _threadCount += i;
-            Monitor.PulseAll(locker);
-            Monitor.Exit(locker);
+            CustomExtension.ActionWorker(locker, () => _threadCount += i);
         }
+
         private void DecrementThreadCount(object locker, int i = 1) {
-            Monitor.Enter(locker);
-            _threadCount -= i;
-            Monitor.PulseAll(locker);
-            Monitor.Exit(locker);
+            CustomExtension.ActionWorker(locker, () => _threadCount -= i);
         }
 
         private void ToggleTerminated(object locker, bool val) {
-            Monitor.Enter(locker);
-            _terminated = val;
-            Monitor.PulseAll(locker);
-            Monitor.Exit(locker);
+            CustomExtension.ActionWorker(locker, () => _terminated = val);
         }
 
         public int GetThreadCount(object locker) { 
-            try {
-                Monitor.Enter(locker);
-                return _threadCount;
-            } finally {
-                Monitor.PulseAll(locker);
-                Monitor.Exit(locker);
-            }
+            return CustomExtension.ActionWorker(locker, () => _threadCount);
+        }
+
+        private void IncrementInputCount(object locker, int i = 1) {
+            CustomExtension.ActionWorker(locker, () => _inputCount += i);
+        }
+
+        private void IncrementUniquCount(object locker, int i = 1) {
+            CustomExtension.ActionWorker(locker, () => _uniqueCount += i);
+        }
+
+        private void IncrementDuplicateCount(object locker, int i = 1) {
+            CustomExtension.ActionWorker(locker, () => _duplicateCount += i);
+        }
+
+        public int GetInputCount(object locker) {
+            return CustomExtension.ActionWorker(locker, () => _inputCount);
+        }
+
+        public int GetUniqueCount(object locker) {
+            return CustomExtension.ActionWorker(locker, () => _uniqueCount);
+        }
+
+        public int GetDuplicateCount(object locker) { 
+            return CustomExtension.ActionWorker(locker, () => _duplicateCount);
         }
 
         TcpListener server = null;
@@ -144,9 +158,9 @@ namespace SocketServer {
 
                 try {
                     data = Encoding.ASCII.GetString(bytes, 0, i);
-                    Console.WriteLine(
-                        "(Thread {0}) Received: {1}", 
-                        threadId, data);
+                    // Console.WriteLine(
+                    //     "(Thread {0}) Received: {1}", 
+                    //     threadId, data);
 
                     if (data == "terminate") {
                         string terminationMsg = 
@@ -174,10 +188,21 @@ namespace SocketServer {
                         return;
                     }
 
-                    string str = "Transmission Acknowledged";
-                    logFile.WriteInLog(_locker, threadId, data);
-                    stream.SendMessage(str);
-                    Console.WriteLine("(Thread {0}) Sent: {1}", threadId, str);
+
+                    IncrementInputCount(_locker);
+                    if (hashSet.AddToSet(_locker, data)) {
+                        IncrementUniquCount(_locker);
+                        logFile.WriteInLog(_locker, threadId, data);
+                        string str = "Accepted: duplicate was NOT found";
+                        stream.SendMessage(str);
+                        // Console.WriteLine("(Thread {0}) Sent: {1}", threadId, str);
+                    } else {
+                        IncrementDuplicateCount(_locker);
+                        string str = "Rejected: duplicate was found (" + data + ")";
+                        stream.SendMessage(str);
+                        Console.WriteLine("(Thread {0}) Sent: {1}", threadId, str);
+                    }
+
                 } catch(Exception ex) {
                     Console.WriteLine("Exception: {0}", ex.Message);
                     logFile.Close();
@@ -194,35 +219,6 @@ namespace SocketServer {
             stream.SendMessage(denialMsg);
             DecrementThreadCount(_locker);
             client.Close();
-        }
-    }
-
-    public static class CustomClassExtension {
-        public  static void SendMessage(this NetworkStream stream, string msg) {
-            Byte[] replyBytes = System.Text.Encoding.ASCII.GetBytes(msg);
-            stream.Write(replyBytes, 0, replyBytes.Length);
-        }
-
-        public static void WriteInLog(
-            this StreamWriter file, 
-            object locker, 
-            string threadId,
-            string msg) {
-            Monitor.Enter(locker);
-            file.WriteLine("(Thread {0}) : {1}", threadId, msg);
-            Monitor.PulseAll(locker);
-            Monitor.Exit(locker);
-        }
-
-        public static void ConsoleWriteline(string threadId, string msg) {
-            Console.WriteLine("(Thread {0}) {1}", threadId, msg);
-        }
-
-
-        public static void ExitMonitor(this object locker)
-        {
-            if (Monitor.IsEntered(locker))
-                Monitor.Exit(locker);
         }
     }
 
