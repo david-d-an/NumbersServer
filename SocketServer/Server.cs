@@ -227,7 +227,16 @@ namespace SocketServer
         public void Notifiy() {
             while(!_terminated) {
                 Thread.Sleep(10000);
-                Console.WriteLine("Hey : {0}", DateTime.Now.ToString("HH:mm:ss"));
+
+                String msg = 
+                    "Received: " + DateTime.Now.ToString("HH:mm:ss") +
+                    Environment.NewLine +
+                    Environment.NewLine +
+                    GetUniqueCount(_locker) + " unique numbers, " +
+                    GetDuplicateCount(_locker) + " duplicates. " +
+                    "Unique total: " + GetInputCount(_locker);
+
+                Console.WriteLine(msg);
             }
         }
     }
