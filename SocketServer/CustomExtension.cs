@@ -29,7 +29,6 @@ namespace SocketServer
             }
         }
 
-
         public  static void SendMessage(this NetworkStream stream, string msg) {
             Byte[] replyBytes = System.Text.Encoding.ASCII.GetBytes(msg);
             stream.Write(replyBytes, 0, replyBytes.Length);
