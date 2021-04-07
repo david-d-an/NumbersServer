@@ -56,7 +56,7 @@ namespace SocketClient
 
                     // Console.WriteLine("(Client {0}) Received: {1}", threadId, response);
                     // Intentional delay for testing
-                    Thread.Sleep(2000);
+                    // Thread.Sleep(2000);
                 }
                 client.Close();
                 stream.Close();
