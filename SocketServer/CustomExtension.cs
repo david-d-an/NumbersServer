@@ -37,10 +37,9 @@ namespace SocketServer
         public static void WriteInLog(
             this StreamWriter file, 
             object locker, 
-            string threadId,
             string msg) {
             System.Threading.Monitor.Enter(locker);
-            file.WriteLine("(Thread {0}) : {1}", threadId, msg);
+            file.WriteLine(msg);
             System.Threading.Monitor.PulseAll(locker);
             System.Threading.Monitor.Exit(locker);
         }
@@ -50,11 +49,11 @@ namespace SocketServer
             System.Threading.Monitor.Enter(locker);
             try {
                 // Check and Add must be atomic Tx
-                if (set.Where(i => i == value).Count() == 0) {
-                    set.Add(value);
-                    return true;
-                }
-                return false;
+                if (set.Contains(value))
+                    return false;
+
+                set.Add(value);
+                return true;
             }
             finally {
                 System.Threading.Monitor.PulseAll(locker);
