@@ -97,11 +97,13 @@ namespace SocketServer
 
       var counters = new KeyValuePair<string, int>[] {
           new KeyValuePair<string, int>(
-              "Duplicate", _duplicateCountSession),
-          new KeyValuePair<string, int>(
               "Unique", _uniqueCountSession),
           new KeyValuePair<string, int>(
               "TotalUnique", _uniqueCount),
+          new KeyValuePair<string, int>(
+              "Duplicate", _duplicateCountSession),
+          new KeyValuePair<string, int>(
+              "TotalDuplicate", _duplicateCount),
           new KeyValuePair<string, int>(
               "TotalSubmission", _inputCount)
       };
@@ -316,23 +318,26 @@ namespace SocketServer
     /* This competes with Sift thread                   */
     /****************************************************/
     public void Notify() {
+        String msgTemplate = Environment.NewLine +
+                    "Received at {0}" + Environment.NewLine +
+                    "# Unique since last report: {1}" + Environment.NewLine +
+                    "# Unique all time: {2}" + Environment.NewLine +
+                    "# Duplicates since last report: {3}" + Environment.NewLine +
+                    "# Duplicates all time: {4}" + Environment.NewLine +
+                    "# Total submission: {5}" + Environment.NewLine;
+
       while(!_terminated) {
         Thread.Sleep(10000);
 
         var counts = FlushCounters(_counterLock);
         int uc = counts.Where(k => k.Key == "Unique").FirstOrDefault().Value;
-        int dc = counts.Where(k => k.Key == "Duplicate").FirstOrDefault().Value;
         int tu = counts.Where(k => k.Key == "TotalUnique").FirstOrDefault().Value;
+        int dc = counts.Where(k => k.Key == "Duplicate").FirstOrDefault().Value;
+        int td = counts.Where(k => k.Key == "TotalDuplicate").FirstOrDefault().Value;
         int ts = counts.Where(k => k.Key == "TotalSubmission").FirstOrDefault().Value;
 
-        String msg = Environment.NewLine +
-                    "Received at " + DateTime.Now.ToString("HH:mm:ss") +
-                    Environment.NewLine +
-                    "# of Unique since last report: " + uc + Environment.NewLine +
-                    "# of Duplicates since last report: " + dc + Environment.NewLine +
-                    "# Unique all time: " + tu + Environment.NewLine +
-                    "# of Total submission: " + ts + Environment.NewLine;
-        Console.WriteLine(msg);
+        Console.WriteLine(msgTemplate, 
+          DateTime.Now.ToString("HH:mm:ss"), uc, tu, dc, td, ts);
       }
     }
 
