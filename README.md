@@ -1,4 +1,15 @@
 # NumbersServer
+
+Please see **Challenge Instructions.md** for intrctions for:
+
+* Configuration
+* Build
+* Execution
+* Assumptions
+* Test Data Sets
+
+<br>
+
 # .NET Numbers Server Code Challenge Instructions 
 
 Write a server (“Application”) in C# or C++ that opens a TCP socket and restricts input to at most 5 concurrent clients. Clients will connect to the Application and write any number of 9 digit numbers, and then close the connection.
