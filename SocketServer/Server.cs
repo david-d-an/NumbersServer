@@ -243,7 +243,10 @@ namespace SocketServer
         string stringData = Encoding.ASCII.GetString(bytes, 0, readCount);
         var dataArray = stringData.Split("\n");
         try {
-          foreach(var data in dataArray) {
+          foreach(var d in dataArray) {
+            // Remove all null characters
+            var data = d.Replace("\0", "");
+
             // Skip blank line
             if (data.Length == 0)
               continue;
