@@ -12,14 +12,18 @@ namespace SocketServer
   class Server {
     private readonly string logFileName = "./Logs/result.log";
     private readonly string ip = "127.0.0.1";
-    private readonly int port = 4000;
-    private readonly int MaxItemCountInChunk = 3266;
+    private readonly int port = 2000;
+
+    private readonly int MaxItemCountInChunk = 5000;
     private readonly int ItemSize = 10;
 
     private readonly string _locker = "THREAD_LOCKER";
-    private readonly int _maxThreadCount = 5;
+
+    // MaxThreadCount is the same as MaxConnectionCount
+    private readonly int MaxThreadCount = 5;
+
     private TcpListener server = null;
-    private int _threadCount;
+    private int _threadCount = 0;
     private static bool _terminated = false;
 
     private StreamWriter logFile;
@@ -30,78 +34,72 @@ namespace SocketServer
     private int _duplicateCount = 0;
     private int _duplicateCountSession = 0;
 
-
     // Use Hash set for average O(1) performance.
-    private HashSet<string> hashSet = new HashSet<string>();
+    private HashSet<string> uniqueValues = new HashSet<string>();
 
     #region ThreadCount
     private int GetThreadCount(object locker) =>
-        CustomExtension.ActionWorker(locker, () => _threadCount);
+        Util.Monitor(locker, () => _threadCount);
     private void IncrementThreadCount(object locker, int i = 1) =>
-        CustomExtension.ActionWorker(locker, () => _threadCount += i);
+        Util.Monitor(locker, () => _threadCount += i);
     private void DecrementThreadCount(object locker, int i = 1) =>
-        CustomExtension.ActionWorker(locker, () => _threadCount -= i);
+        Util.Monitor(locker, () => _threadCount -= i);
     #endregion
 
     private void ToggleTerminated(object locker, bool val) =>
-        CustomExtension.ActionWorker(locker, () => _terminated = val);
+        Util.Monitor(locker, () => _terminated = val);
 
     #region InputCount
     private int GetInputCount(object locker) =>
-        CustomExtension.ActionWorker(locker, () => _inputCount);
+        Util.Monitor(locker, () => _inputCount);
     private void IncrementInputCount(object locker, int i = 1) =>
-        CustomExtension.ActionWorker(locker, () => _inputCount += i);
+        Util.Monitor(locker, () => _inputCount += i);
     private int GetInputCountSession(object locker) =>
-        CustomExtension.ActionWorker(locker, () => _inputCountSession);
+        Util.Monitor(locker, () => _inputCountSession);
     private void IncrementInputCountSession(object locker, int i = 1) =>
-        CustomExtension.ActionWorker(locker, () => _inputCountSession += i);
+        Util.Monitor(locker, () => _inputCountSession += i);
     #endregion
 
     #region UniqueCount
     private int GetUniqueCount(object locker) =>
-        CustomExtension.ActionWorker(locker, () => _uniqueCount);
+        Util.Monitor(locker, () => _uniqueCount);
     private void IncrementUniquCount(object locker, int i = 1) =>
-        CustomExtension.ActionWorker(locker, () => _uniqueCount += i);
+        Util.Monitor(locker, () => _uniqueCount += i);
     private int GetUniqueCountSession(object locker) =>
-        CustomExtension.ActionWorker(locker, () => _uniqueCountSession);
+        Util.Monitor(locker, () => _uniqueCountSession);
     private void IncrementUniquCountSession(object locker, int i = 1) =>
-        CustomExtension.ActionWorker(locker, () => _uniqueCountSession += i);
+        Util.Monitor(locker, () => _uniqueCountSession += i);
     #endregion
 
     #region DuplicateCount
     private int GetDuplicateCount(object locker) =>
-        CustomExtension.ActionWorker(locker, () => _duplicateCount);
+        Util.Monitor(locker, () => _duplicateCount);
     private void IncrementDuplicateCount(object locker, int i = 1) =>
-        CustomExtension.ActionWorker(locker, () => _duplicateCount += i);
+        Util.Monitor(locker, () => _duplicateCount += i);
     private int GetDuplicateCountSession(object locker) =>
-        CustomExtension.ActionWorker(locker, () => _duplicateCountSession);
+        Util.Monitor(locker, () => _duplicateCountSession);
     private void IncrementDuplicateCountSession(object locker, int i = 1) =>
-        CustomExtension.ActionWorker(locker, () => _duplicateCountSession += i);
+        Util.Monitor(locker, () => _duplicateCountSession += i);
     #endregion
 
     private KeyValuePair<string, int>[] FlushCounters(object locker) {
       Monitor.Enter(locker);
-      var counters = new KeyValuePair<string, int>[] {
-          new KeyValuePair<string, int>(
-              "Duplicate",
-              _duplicateCountSession
-          ),
-          new KeyValuePair<string, int>(
-              "Unique",
-              _uniqueCountSession
-          ),
-          new KeyValuePair<string, int>(
-              "TotalUnique",
-              _uniqueCount + _uniqueCountSession
-          ),
-          new KeyValuePair<string, int>(
-              "TotalSubmission",
-              _inputCount
-          )
-      };
+
       _duplicateCount += _duplicateCountSession;
       _uniqueCount += _uniqueCountSession;
       _inputCount += _inputCountSession;
+
+      var counters = new KeyValuePair<string, int>[] {
+          new KeyValuePair<string, int>(
+              "Duplicate", _duplicateCountSession),
+          new KeyValuePair<string, int>(
+              "Unique", _uniqueCountSession),
+          new KeyValuePair<string, int>(
+              "TotalUnique", _uniqueCount),
+          new KeyValuePair<string, int>(
+              "TotalSubmission", _inputCount)
+      };
+
       _duplicateCountSession = 0;
       _uniqueCountSession = 0;
       _inputCountSession = 0;
@@ -112,14 +110,13 @@ namespace SocketServer
     }
 
     public Server() {
-      _threadCount = 0;
       Directory.CreateDirectory("./Logs");
       logFile = new StreamWriter(logFileName) { AutoFlush = true };
-      IPAddress localAddr = IPAddress.Parse(ip);
-      server = new TcpListener(localAddr, port);
-      // server.Server.ReceiveTimeout = 1000;
-      // server.Server.SendTimeout = 1000;
+
+      server = new TcpListener(IPAddress.Parse(ip), port);
+
       try {
+        // Notifier pushes stats to Console every 10 seconds
         new Thread(() => Notifiy()).Start();
 
         server.Start();
@@ -137,7 +134,9 @@ namespace SocketServer
       Console.WriteLine("Waiting for a connection...");
 
       while (true) {
+        // Main thread standing by to accpet client by AcceptTcpClient()
         while(!server.Pending()) {
+          // Ternmination initiated by a client
           if (_terminated) {
             Console.WriteLine("Server shutdown by termination request.");
             return;
@@ -146,14 +145,15 @@ namespace SocketServer
         }
         TcpClient client = server.AcceptTcpClient();
 
+        // Checking connection pool for availability
         StringBuilder connMsg = new StringBuilder("Connection Request received!\n");
         try {
-          connMsg.Append((_maxThreadCount - GetThreadCount(_locker)).ToString());
+          connMsg.Append(MaxThreadCount - GetThreadCount(_locker));
           connMsg.Append("/");
-          connMsg.Append(_maxThreadCount.ToString());
-          connMsg.Append(" Connections Available\n");
+          connMsg.Append(MaxThreadCount.ToString());
+          connMsg.Append(" Connections available\n");
 
-          if (GetThreadCount(_locker) < 5) {
+          if (GetThreadCount(_locker) < MaxThreadCount) {
             Thread t = new Thread(
               new ParameterizedThreadStart(HandleDeivce));
             t.Start(client);
@@ -179,21 +179,35 @@ namespace SocketServer
       string threadId = Thread.CurrentThread.ManagedThreadId
                         .ToString().PadLeft(2, '0');
       var stream = client.GetStream();
-      stream.ReadTimeout = 5000;
+      stream.ReadTimeout = 2500;
       string data = null;
       Byte[] bytes = new Byte[MaxItemCountInChunk*ItemSize];
-      int i;            
+      int readCount;
+      string ext = "";
 
       while (!_terminated) {
+        ext = "";
         try {
-          i = stream.Read(bytes, 0, bytes.Length);
-          if (i == 0) {
+          readCount = stream.Read(bytes, 0, bytes.Length);
+          if (readCount == 0) {
             // Client disconnected
             // No need to keep the thread
             DecrementThreadCount(_locker);
             client.Close();
-            // Console.WriteLine(ConnectClosedMsg());
             return;
+          }
+
+          // Additional read if initially read part of client packet.
+          // while (readCount < bytes.Length && bytes[readCount-1] != 10) {
+          while (readCount < bytes.Length) {
+            // var updatedBytes = bytes.ToList();
+            var tmpCount = stream.Read(bytes, readCount, bytes.Length-readCount);
+            readCount += tmpCount;
+            // Pad the origianl byte array to make it complete read
+            // if (tmpCount > 0) {
+            //   updatedBytes.AddRange(bytes.ToList());
+            //   bytes = updatedBytes.ToArray();
+            // }
           }
         } catch(IOException) {
           // ReadTimeout causes IOException
@@ -202,11 +216,12 @@ namespace SocketServer
         } catch(Exception e) {
           Console.WriteLine(
             "(Thread {0}) Exception while reading stream: {1}", 
-            threadId, e.Message);
+            threadId, e);
           continue;
         }
 
-        var dataArray = Encoding.ASCII.GetString(bytes, 0, i).Split("\n");
+        string stringData = Encoding.ASCII.GetString(bytes, 0, readCount);
+        var dataArray = stringData.Split("\n");
         try {
           foreach(var d in dataArray) {
             // data = Encoding.ASCII.GetString(bytes, 0, i);
@@ -245,8 +260,9 @@ namespace SocketServer
               return;
             }
 
+            // Regular data. Check duplicate and keep record
             IncrementInputCountSession(_locker);
-            if (hashSet.AddToSet(_locker, data)) {
+            if (uniqueValues.AddToSet(_locker, data)) {
               IncrementUniquCountSession(_locker);
               logFile.WriteInLog(_locker, threadId, data);
               // string str = "Accepted: duplicate was NOT found";
@@ -259,10 +275,15 @@ namespace SocketServer
               // Console.WriteLine("(Thread {0}) Sent: {1}", threadId, str);
             }
           }
-          stream.SendMessage("Received " + bytes.Length + " bytes");
 
+          // Send Tx receipt to client
+          bytes = new Byte[MaxItemCountInChunk * ItemSize];
+          stream.SendMessage("Received " + stringData.Length + " bytes" + ext);
+        } catch(IOException) {
+          Console.WriteLine("Client connection is already terminated");
         } catch(Exception ex) {
-          Console.WriteLine("Exception: {0}", ex.Message);
+          stream.SendMessage("Server error occurred");
+          Console.WriteLine("Exception: {0}", ex.StackTrace);
           logFile.Close();
           // throw ex;
           return;
@@ -282,9 +303,9 @@ namespace SocketServer
 
     private string ConnectClosedMsg() {
       StringBuilder connMsg = new StringBuilder("Connection closed\n");
-      connMsg.Append((_maxThreadCount - GetThreadCount(_locker)).ToString());
+      connMsg.Append((MaxThreadCount - GetThreadCount(_locker)).ToString());
       connMsg.Append("/");
-      connMsg.Append(_maxThreadCount.ToString());
+      connMsg.Append(MaxThreadCount.ToString());
       connMsg.Append(" Connections Available\n");
       return connMsg.ToString();
     }
