@@ -10,6 +10,7 @@ using System.Threading;
 namespace SocketServer
 {
   class Server {
+    private const int NumberOfSifters = 1;
     private readonly string logFileName = "./Logs/result.log";
     private readonly string ip = "127.0.0.1";
     private readonly int port = 4000;
@@ -96,11 +97,13 @@ namespace SocketServer
 
       var counters = new KeyValuePair<string, int>[] {
           new KeyValuePair<string, int>(
-              "Duplicate", _duplicateCountSession),
-          new KeyValuePair<string, int>(
               "Unique", _uniqueCountSession),
           new KeyValuePair<string, int>(
               "TotalUnique", _uniqueCount),
+          new KeyValuePair<string, int>(
+              "Duplicate", _duplicateCountSession),
+          new KeyValuePair<string, int>(
+              "TotalDuplicate", _duplicateCount),
           new KeyValuePair<string, int>(
               "TotalSubmission", _inputCount)
       };
@@ -122,14 +125,17 @@ namespace SocketServer
 
       try {
         // Notifier pushes stats to Console every 10 seconds
-        var notifier = new Thread(() => Notify());
-        notifier.IsBackground = true;
-        notifier.Start();
+        new Thread(() => Notify()) {
+          IsBackground = true
+        }.Start();
 
         // Sift is worker to process data
-        var sifter = new Thread(() => Sift());
-        sifter.IsBackground = true;
-        sifter.Start();
+        for(int i = 0; i < NumberOfSifters; i++) {
+          new Thread(() => Sift()) {
+            IsBackground = true
+          }.Start();
+        }
+
         server.Start();
         StartListener();
       } catch (SocketException e) {
@@ -312,24 +318,26 @@ namespace SocketServer
     /* This competes with Sift thread                   */
     /****************************************************/
     public void Notify() {
+        String msgTemplate = Environment.NewLine +
+                    "Received at {0}" + Environment.NewLine +
+                    "# Unique since last report: {1}" + Environment.NewLine +
+                    "# Unique all time: {2}" + Environment.NewLine +
+                    "# Duplicates since last report: {3}" + Environment.NewLine +
+                    "# Duplicates all time: {4}" + Environment.NewLine +
+                    "# Total submission: {5}" + Environment.NewLine;
+
       while(!_terminated) {
         Thread.Sleep(10000);
 
         var counts = FlushCounters(_counterLock);
         int uc = counts.Where(k => k.Key == "Unique").FirstOrDefault().Value;
-        int dc = counts.Where(k => k.Key == "Duplicate").FirstOrDefault().Value;
         int tu = counts.Where(k => k.Key == "TotalUnique").FirstOrDefault().Value;
+        int dc = counts.Where(k => k.Key == "Duplicate").FirstOrDefault().Value;
+        int td = counts.Where(k => k.Key == "TotalDuplicate").FirstOrDefault().Value;
         int ts = counts.Where(k => k.Key == "TotalSubmission").FirstOrDefault().Value;
 
-        String msg = Environment.NewLine +
-                    "Received at " + DateTime.Now.ToString("HH:mm:ss") +
-                    Environment.NewLine +
-                    uc + " unique numbers, " +
-                    dc + " duplicates. " +
-                    "Unique total: " + tu +
-                    " Total Submission: " + ts +
-                    Environment.NewLine;
-        Console.WriteLine(msg);
+        Console.WriteLine(msgTemplate, 
+          DateTime.Now.ToString("HH:mm:ss"), uc, tu, dc, td, ts);
       }
     }
 
