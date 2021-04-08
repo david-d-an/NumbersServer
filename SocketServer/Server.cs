@@ -117,16 +117,19 @@ namespace SocketServer
     public Server() {
       dataQueue = new Queue<string>();
       Directory.CreateDirectory("./Logs");
-      logFile = new StreamWriter(logFileName) { AutoFlush = true };
-
+      logFile = new StreamWriter(logFileName) { AutoFlush = false };
       server = new TcpListener(IPAddress.Parse(ip), port);
 
       try {
         // Notifier pushes stats to Console every 10 seconds
-        new Thread(() => Notify()).Start();
-        // Sift is worker to process data
-        new Thread(() => Sift()).Start();
+        var notifier = new Thread(() => Notify());
+        notifier.IsBackground = true;
+        notifier.Start();
 
+        // Sift is worker to process data
+        var sifter = new Thread(() => Sift());
+        sifter.IsBackground = true;
+        sifter.Start();
         server.Start();
         StartListener();
       } catch (SocketException e) {
@@ -163,7 +166,8 @@ namespace SocketServer
 
           if (GetThreadCount(_threadLock) < MaxThreadCount) {
             Thread t = new Thread(
-              new ParameterizedThreadStart(HandleDeivce));
+              new ParameterizedThreadStart(HandleClient));
+            t.IsBackground = true;
             t.Start(client);
             IncrementThreadCount(_threadLock);
             connMsg.Append("Connection created.\n");
@@ -181,7 +185,12 @@ namespace SocketServer
       }
     }
 
-    public void HandleDeivce(Object obj) {
+    /***************************************************************/
+    /* The main creates mulitple thread of this function to handle */ 
+    /* Client data submission                                      */
+    /* This competes with main thread and other HadleClient thread */
+    /***************************************************************/
+    public void HandleClient(Object obj) {
       TcpClient client = (TcpClient)obj;
       string threadId = Thread.CurrentThread.ManagedThreadId
                         .ToString().PadLeft(2, '0');
@@ -229,8 +238,10 @@ namespace SocketServer
         var dataArray = stringData.Split("\n");
         try {
           foreach(var data in dataArray) {
+            // Skip blank line
             if (data.Length == 0)
               continue;
+            // terminate request detected
             else if (data == "terminate") {
               string terminationMsg =
                 "Termination requested. Server is being shutdown.";
@@ -245,6 +256,7 @@ namespace SocketServer
               // Console.WriteLine(ConnectClosedMsg());
               return;
             }
+            // invalid data detected
             else if (data.Length != 9 || !long.TryParse(data, out long x)) {
               string msg = 
                 "Invalid value entered. Connection is being terminated.";
@@ -260,22 +272,16 @@ namespace SocketServer
               return;
             }
 
-            // Regular data. Check duplicate and keep record            
+            // Normal data. 
+            // Add to queue and Sift will handle the rest
             Monitor.Enter(_queueLock);
             dataQueue.Enqueue(data);
             Monitor.PulseAll(_queueLock);
             Monitor.Exit(_queueLock);
-
-            // IncrementInputCountSession(_locker);
-            // if (uniqueValues.AddToSet(_locker, data)) {
-            //   IncrementUniquCountSession(_locker);
-            //   // logFile.WriteInLog(_locker, threadId, data);
-            // } else {
-            //   IncrementDuplicateCountSession(_locker);
-            // }
           }
 
           // Send Tx receipt to client
+          // The client won't send next packet until this receipt is recieved
           bytes = new Byte[MaxItemCountInChunk * ItemSize];
           stream.SendMessage("Received " + stringData.Length + " bytes" + ext);
         } catch(IOException) {
@@ -300,15 +306,11 @@ namespace SocketServer
       // Console.WriteLine(ConnectClosedMsg());
     }
 
-    private string ConnectClosedMsg() {
-      StringBuilder connMsg = new StringBuilder("Connection closed\n");
-      connMsg.Append((MaxThreadCount - GetThreadCount(_threadLock)).ToString());
-      connMsg.Append("/");
-      connMsg.Append(MaxThreadCount.ToString());
-      connMsg.Append(" Connections Available\n");
-      return connMsg.ToString();
-    }
 
+    /****************************************************/
+    /* Separated worker logics from HandleClient thread */
+    /* This competes with Sift thread                   */
+    /****************************************************/
     public void Notify() {
       while(!_terminated) {
         Thread.Sleep(10000);
@@ -331,6 +333,10 @@ namespace SocketServer
       }
     }
 
+    /****************************************************/
+    /* Separated worker logics from HandleClient thread */
+    /* This competes with Notify thread                 */
+    /****************************************************/
     public void Sift() {
       while(!_terminated) {
         if (dataQueue.Count == 0)
@@ -345,27 +351,16 @@ namespace SocketServer
         Monitor.Exit(_queueLock);
 
         foreach(var data in tmpQ) {
-          // _inputCountSession++;
-          // if (uniqueValues.Contains(data)) {
-          //   _uniqueCountSession++;
-          //   // logFile.WriteInLog(_counterLock, data);
-          // }
-          // else {
-          //   uniqueValues.Add(data);
-          //   _duplicateCountSession++;
-          // }
-
           IncrementInputCountSession(_counterLock);
           if (uniqueValues.AddToSet(_counterLock, data)) {
             IncrementUniquCountSession(_counterLock);
-            // logFile.WriteInLog(_counterLock, data);
+            logFile.WriteInLog(_counterLock, data);
           } else {
             IncrementDuplicateCountSession(_counterLock);
           }
         }
-
+        logFile.Flush();
       }
     }
-
   }
 }
