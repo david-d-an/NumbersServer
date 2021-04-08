@@ -10,6 +10,7 @@ using System.Threading;
 namespace SocketServer
 {
   class Server {
+    private const int NumberOfSifters = 1;
     private readonly string logFileName = "./Logs/result.log";
     private readonly string ip = "127.0.0.1";
     private readonly int port = 4000;
@@ -127,9 +128,12 @@ namespace SocketServer
         notifier.Start();
 
         // Sift is worker to process data
-        var sifter = new Thread(() => Sift());
-        sifter.IsBackground = true;
-        sifter.Start();
+        for(int i = 0; i < NumberOfSifters; i++) {
+          var sifter = new Thread(() => Sift());
+          sifter.IsBackground = true;
+          sifter.Start();
+        }
+
         server.Start();
         StartListener();
       } catch (SocketException e) {
@@ -324,11 +328,10 @@ namespace SocketServer
         String msg = Environment.NewLine +
                     "Received at " + DateTime.Now.ToString("HH:mm:ss") +
                     Environment.NewLine +
-                    uc + " unique numbers, " +
-                    dc + " duplicates. " +
-                    "Unique total: " + tu +
-                    " Total Submission: " + ts +
-                    Environment.NewLine;
+                    "# of Unique since last report: " + uc + Environment.NewLine +
+                    "# of Duplicates since last report: " + dc + Environment.NewLine +
+                    "# Unique all time: " + tu + Environment.NewLine +
+                    "# of Total submission: " + ts + Environment.NewLine;
         Console.WriteLine(msg);
       }
     }
