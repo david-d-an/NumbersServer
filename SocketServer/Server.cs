@@ -123,15 +123,15 @@ namespace SocketServer
 
       try {
         // Notifier pushes stats to Console every 10 seconds
-        var notifier = new Thread(() => Notify());
-        notifier.IsBackground = true;
-        notifier.Start();
+        new Thread(() => Notify()) {
+          IsBackground = true
+        }.Start();
 
         // Sift is worker to process data
         for(int i = 0; i < NumberOfSifters; i++) {
-          var sifter = new Thread(() => Sift());
-          sifter.IsBackground = true;
-          sifter.Start();
+          new Thread(() => Sift()) {
+            IsBackground = true
+          }.Start();
         }
 
         server.Start();
