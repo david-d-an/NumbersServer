@@ -7,11 +7,16 @@ namespace SocketClient
         static void Main(string[] args) {
 
             // new Thread(() => new Client("./Data/a100K-Invalid.txt", 0)).Start();
-            new Thread(() => new Client("./Data/a2M.txt", 0)).Start();
-            for(int i = 1; i < 10; i++) {
-                new Thread(() => new Client("./Data/a400K.txt", i)).Start();
-                Thread.Sleep(2000);
-            }
+
+            new Thread(() => new Client("./Data/a2-2M-A.txt", 0)).Start();
+            new Thread(() => new Client("./Data/a2-2M-B.txt", 0)).Start();
+
+            // new Thread(() => new Client("./Data/a2M.txt", 0)).Start();
+
+            // for(int i = 1; i < 10; i++) {
+            //     new Thread(() => new Client("./Data/a400K.txt", i)).Start();
+            //     Thread.Sleep(2000);
+            // }
 
        }
     }

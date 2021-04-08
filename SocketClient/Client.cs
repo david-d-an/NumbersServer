@@ -10,7 +10,7 @@ namespace SocketClient
         private string _ip = "127.0.0.1";
         private int _port = 4000;
         private string _threadId;
-        private readonly int MaxItemCountInChunk = 5000;
+        private readonly int MaxItemCountInChunk = 50000;
         // private readonly int ItemSize = 10;
 
         public Client() {
@@ -39,6 +39,7 @@ namespace SocketClient
             TcpClient client = new TcpClient(server, _port);
             NetworkStream netStream = client.GetStream();
             netStream.ReadTimeout = 2500;
+            netStream.WriteTimeout = 2500;
 
             try {
                 StreamReader fileStream = new StreamReader(fileName);
