@@ -1,75 +1,120 @@
 using System;
 using System.IO;
 using System.Net.Sockets;
+using System.Text;
 using System.Threading;
 
 namespace SocketClient
 {
     class Client{
-        private string ip = "127.0.0.1";
-        private int port = 4000;
-        private string threadId;
+        private string _ip = "127.0.0.1";
+        private int _port = 2000;
+        private string _threadId;
+        private readonly int MaxItemCountInChunk = 5000;
+        // private readonly int ItemSize = 10;
 
         public Client() {
             // Thread ID = last 4 digits of GUID
-            threadId = Guid.NewGuid().ToString();
-            threadId = threadId.Substring(threadId.Length - 4);
+            _threadId = Guid.NewGuid().ToString();
+            _threadId = _threadId.Substring(_threadId.Length - 4);
 
-            Console.Write("(Client {0}) File Name: ", threadId);
+            Console.Write("(Client {0}) File Name: ", _threadId);
             string fileName = Console.ReadLine();
-            Connect(ip, fileName);
+            Connect(_ip, fileName);
         }
 
-        public Client(int id, string fileName) {
-            threadId = id.ToString();
+        public Client(string fileName, int? id = null) {
+            if (id == null) {
+                _threadId = Guid.NewGuid().ToString();
+                _threadId = _threadId.Substring(_threadId.Length - 4);
+            } else {
+                _threadId = id.ToString();
+            }
 
-            Console.WriteLine("(Client {0}) File Name: {1}", threadId, fileName);
-            Connect(ip, fileName);
+            Console.WriteLine("(Client {0}) File Name: {1}", _threadId, fileName);
+            Connect(_ip, fileName);
         }
 
         void Connect(String server, string fileName) {
-            try {
-                StreamReader file = new StreamReader(fileName);
-                string message;
-                TcpClient client = new TcpClient(server, port);
-                NetworkStream stream = client.GetStream();
-                stream.ReadTimeout = 5000;
+            TcpClient client = new TcpClient(server, _port);
+            NetworkStream netStream = client.GetStream();
+            netStream.ReadTimeout = 2500;
 
-                while ((message = file.ReadLine()) != null) {
-                    // var message = Console.ReadLine();
+            try {
+                StreamReader fileStream = new StreamReader(fileName);
+                string message;
+
+                long dataCount = 0;
+                StringBuilder chunk = new StringBuilder();
+                while (true)
+                {
+                    message = fileStream.ReadLine();
+
+                    // EOF: Final transmission
+                    if (message == null) {
+                        Transmit(chunk.ToString(), netStream);
+                        break;
+                    }
+
+                    // Skip balnk line
                     if (message.Length == 0)
                         continue;
 
-                    // Translate the Message into ASCII.
-                    Byte[] data = System.Text.Encoding.ASCII.GetBytes(message);   
-                    // Send the message to the connected TcpServer. 
-                    stream.Write(data, 0, data.Length);
-                    // Console.WriteLine("(Client {0}) Sent: {1}", threadId, message);         
+                    // Buiild a message packe 
+                    chunk.Append(message).Append("\n");
+                    dataCount++;
 
-                    // Bytes Array to receive Server Response.
-                    data = new Byte[256];
-                    String response = String.Empty;
-
-                    // Read the Tcp Server Response Bytes.
-                    Int32 bytes = stream.Read(data, 0, data.Length);
-                    response = System.Text.Encoding.ASCII.GetString(data, 0, bytes);
-
-                    // Console.WriteLine("(Client {0}) Received: {1}", threadId, response);
-                    // Intentional delay for testing
-                    // Thread.Sleep(2000);
+                    // Message packet built complete. Tx immediately 
+                    if (dataCount % MaxItemCountInChunk == 0) {
+                        Transmit(chunk.ToString(), netStream);
+                        chunk = new StringBuilder();
+                    }
                 }
-                client.Close();
-                stream.Close();
+
+                // Wait for server termination
+                // Client should not terminate as that causes broken pipe server side
+                while(true) {
+                    Thread.Sleep(20);
+                    CheckMessage(netStream);
+                }
             }
             catch (IOException) {
-                Console.WriteLine("(Client {0}) Connection closed by the server.", threadId);
+                Console.WriteLine("(Client {0}) Connection closed by the server.", _threadId);
             }
             catch (Exception e) {
-                Console.WriteLine("(Client {0}) Exception: {1}", threadId, e);
+                Console.WriteLine("(Client {0}) Exception: {1}", _threadId, e);
             }
             finally {
+                client.Close();
+                netStream.Close();
             }
         }
 
+        private void Transmit(string message, NetworkStream stream) {
+            // Thread.Sleep(10);
+
+            // Translate the Message into ASCII.
+            Byte[] data = System.Text.Encoding.ASCII.GetBytes(message);
+
+            stream.Write(data, 0, data.Length);
+            // Console.WriteLine("(Client {0}) Sent: {1}", threadId, message);         
+
+            // Read the Tcp Server Response Bytes.
+            Byte[] responseData = new Byte[256];
+            Int32 byteCount = stream.Read(responseData, 0, responseData.Length);
+            string response = System.Text.Encoding.ASCII.GetString(responseData, 0, byteCount);
+
+            Console.WriteLine("(Client {0}) Received: {1}", _threadId, response);
+        }
+
+        private void CheckMessage(NetworkStream stream) {
+            // Read the Tcp Server Response Bytes.
+            Byte[] responseData = new Byte[256];
+            Int32 byteCount = stream.Read(responseData, 0, responseData.Length);
+            if (byteCount > 0) {
+                string response = System.Text.Encoding.ASCII.GetString(responseData, 0, byteCount);
+                Console.WriteLine("(Client {0}) Server Message: {1}", _threadId, response);
+            }
+        }
     }
 }

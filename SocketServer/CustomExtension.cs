@@ -7,25 +7,25 @@ using System.Threading;
 
 namespace SocketServer
 {
-    public static class CustomExtension {
+    public static class Util {
 
-        public static void ActionWorker(object locker, Action action) {
+        public static void Monitor(object locker, Action action) {
             try {
-                Monitor.Enter(locker);
+                System.Threading.Monitor.Enter(locker);
                 action();
             } finally {
-                Monitor.PulseAll(locker);
-                Monitor.Exit(locker);
+                System.Threading.Monitor.PulseAll(locker);
+                System.Threading.Monitor.Exit(locker);
             }
         }
 
-        public static int ActionWorker(object locker, Func<int> func) {
+        public static int Monitor(object locker, Func<int> func) {
             try {
-                Monitor.Enter(locker);
+                System.Threading.Monitor.Enter(locker);
                 return func();
             } finally {
-                Monitor.PulseAll(locker);
-                Monitor.Exit(locker);
+                System.Threading.Monitor.PulseAll(locker);
+                System.Threading.Monitor.Exit(locker);
             }
         }
 
@@ -39,15 +39,15 @@ namespace SocketServer
             object locker, 
             string threadId,
             string msg) {
-            Monitor.Enter(locker);
+            System.Threading.Monitor.Enter(locker);
             file.WriteLine("(Thread {0}) : {1}", threadId, msg);
-            Monitor.PulseAll(locker);
-            Monitor.Exit(locker);
+            System.Threading.Monitor.PulseAll(locker);
+            System.Threading.Monitor.Exit(locker);
         }
 
         public static bool AddToSet(this HashSet<string> set, 
             object locker, string value) {
-            Monitor.Enter(locker);
+            System.Threading.Monitor.Enter(locker);
             try {
                 // Check and Add must be atomic Tx
                 if (set.Where(i => i == value).Count() == 0) {
@@ -57,8 +57,8 @@ namespace SocketServer
                 return false;
             }
             finally {
-                Monitor.PulseAll(locker);
-                Monitor.Exit(locker);
+                System.Threading.Monitor.PulseAll(locker);
+                System.Threading.Monitor.Exit(locker);
             }
         }
 
@@ -69,8 +69,8 @@ namespace SocketServer
 
         public static void ExitMonitor(this object locker)
         {
-            if (Monitor.IsEntered(locker))
-                Monitor.Exit(locker);
+            if (System.Threading.Monitor.IsEntered(locker))
+                System.Threading.Monitor.Exit(locker);
         }
     }
 
