@@ -11,7 +11,7 @@ namespace SocketClient
         private int _port = 4000;
         private string _threadId;
         private readonly int MaxItemCountInChunk = 50000;
-        // private readonly int ItemSize = 10;
+        private readonly int ItemSize = 10;
 
         public Client() {
             // Thread ID = last 4 digits of GUID
@@ -92,10 +92,10 @@ namespace SocketClient
         }
 
         private void Transmit(string message, NetworkStream stream) {
-            // Thread.Sleep(10);
-
             // Translate the Message into ASCII.
             Byte[] data = System.Text.Encoding.ASCII.GetBytes(message);
+            // Data are always sent in a byte[MaxItemCountInChunk * ItemSize]
+            Array.Resize(ref data, MaxItemCountInChunk * ItemSize);
 
             stream.Write(data, 0, data.Length);
             // Console.WriteLine("(Client {0}) Sent: {1}", threadId, message);         
