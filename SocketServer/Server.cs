@@ -12,7 +12,7 @@ namespace SocketServer
   class Server {
     private readonly string logFileName = "./Logs/result.log";
     private readonly string ip = "127.0.0.1";
-    private readonly int port = 2000;
+    private readonly int port = 4000;
 
     private readonly int MaxItemCountInChunk = 5000;
     private readonly int ItemSize = 10;
@@ -180,7 +180,7 @@ namespace SocketServer
                         .ToString().PadLeft(2, '0');
       var stream = client.GetStream();
       stream.ReadTimeout = 2500;
-      string data = null;
+      // string data = null;
       Byte[] bytes = new Byte[MaxItemCountInChunk*ItemSize];
       int readCount;
       string ext = "";
@@ -200,14 +200,10 @@ namespace SocketServer
           // Additional read if initially read part of client packet.
           // while (readCount < bytes.Length && bytes[readCount-1] != 10) {
           while (readCount < bytes.Length) {
-            // var updatedBytes = bytes.ToList();
+            // Initial read was premature
+            // Subsequent reads to fill up the entire array
             var tmpCount = stream.Read(bytes, readCount, bytes.Length-readCount);
             readCount += tmpCount;
-            // Pad the origianl byte array to make it complete read
-            // if (tmpCount > 0) {
-            //   updatedBytes.AddRange(bytes.ToList());
-            //   bytes = updatedBytes.ToArray();
-            // }
           }
         } catch(IOException) {
           // ReadTimeout causes IOException
@@ -223,12 +219,7 @@ namespace SocketServer
         string stringData = Encoding.ASCII.GetString(bytes, 0, readCount);
         var dataArray = stringData.Split("\n");
         try {
-          foreach(var d in dataArray) {
-            // data = Encoding.ASCII.GetString(bytes, 0, i);
-            // Console.WriteLine(
-            //     "(Thread {0}) Received: {1}", 
-            //     threadId, data);
-            data = d;
+          foreach(var data in dataArray) {
             if (data.Length == 0)
               continue;
             else if (data == "terminate") {

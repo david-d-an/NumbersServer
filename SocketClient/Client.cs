@@ -8,7 +8,7 @@ namespace SocketClient
 {
     class Client{
         private string _ip = "127.0.0.1";
-        private int _port = 2000;
+        private int _port = 4000;
         private string _threadId;
         private readonly int MaxItemCountInChunk = 5000;
         // private readonly int ItemSize = 10;
