@@ -5,10 +5,11 @@ namespace SocketServer
 {
     class Program {
         static void Main(string[] args) {
-            new Thread(delegate () {
+            new Thread(delegate() {
                 Server myserver = new Server();
             }).Start();
         
-            Console.WriteLine("Server Started...!");        }
+            Console.WriteLine("Server Started...!");
+        }
     }
 }
