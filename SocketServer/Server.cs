@@ -171,10 +171,11 @@ namespace SocketServer
           connMsg.Append(" Connections available\n");
 
           if (GetThreadCount(_threadLock) < MaxThreadCount) {
-            Thread t = new Thread(
-              new ParameterizedThreadStart(HandleClient));
-            t.IsBackground = true;
-            t.Start(client);
+            new Thread(
+              new ParameterizedThreadStart(HandleClient)) {
+              IsBackground = true
+            }.Start(client);
+
             IncrementThreadCount(_threadLock);
             connMsg.Append("Connection created.\n");
           } else {
