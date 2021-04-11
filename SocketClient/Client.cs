@@ -15,8 +15,7 @@ namespace SocketClient
 
         public Client() {
             // Thread ID = last 4 digits of GUID
-            _threadId = Guid.NewGuid().ToString();
-            _threadId = _threadId.Substring(_threadId.Length - 4);
+            _threadId = Thread.CurrentThread.ManagedThreadId.ToString();
 
             Console.Write("(Client {0}) File Name: ", _threadId);
             string fileName = Console.ReadLine();
@@ -25,8 +24,7 @@ namespace SocketClient
 
         public Client(string fileName, int? id = null) {
             if (id == null) {
-                _threadId = Guid.NewGuid().ToString();
-                _threadId = _threadId.Substring(_threadId.Length - 4);
+                _threadId = Thread.CurrentThread.ManagedThreadId.ToString();
             } else {
                 _threadId = id.ToString();
             }
